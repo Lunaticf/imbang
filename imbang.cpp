@@ -9,6 +9,7 @@
 #include <vector>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <fstream>
 
 #include "imbang.h"
 #include "tinyxml2.h"
@@ -21,7 +22,7 @@ void imbang::fileUnderDir(const string &dirName, int mode){
     // open specific dir
     DIR* dir = opendir(dirName.c_str());
     if(dir == NULL){
-        cout<<"The dir not exist!";
+        cout<<dirName<<"  The dir not exist!";
     } else {
         dirent* p = NULL;
 
@@ -41,9 +42,14 @@ void imbang::fileUnderDir(const string &dirName, int mode){
     }
 }
 
-void imbang::enhancePicByLapa(const string &dirName,const string dstDirName, bool processAll){
+
+void imbang::clearBarn(){
+    imgBarn.clear();
+    xmlBarn.clear();
+}
+
+void imbang::enhancePicByLapa(const string &dirName,const string dstDirName, int key, const string &prefix){
     fileUnderDir(dirName,1);
-    if(processAll){
         for(auto &el:imgBarn){
             string str = dirName + "/" + el;
             Mat image = imread(str);
@@ -54,17 +60,16 @@ void imbang::enhancePicByLapa(const string &dirName,const string dstDirName, boo
             }
             cout<<str + "    processing";
             Mat imageEnhance;
-            el[0] = '9';
-            el[1] = '4';
+            el[0] = prefix[0];
+            el[1] = prefix[1];
 
-            Mat kernel = (Mat_<float>(3, 3) << 0, -1, 0, 0,3.5, 0, 0, -1, 0);
+            Mat kernel = (Mat_<float>(3, 3) << 0, -1, 0, 0, key, 0, 0, -1, 0);
             filter2D(image, imageEnhance, CV_8UC3, kernel);
             string saveImagePath = dstDirName + "/" + el;
             imwrite(saveImagePath,imageEnhance);
             cout<<endl<<saveImagePath<<"    saved"<<endl;
         }
-    }
-    imgBarn.clear();
+    clearBarn();
 }
 
 void imbang::batchBlur(const string &dirName,const string &dstDirName,const string &prefix){
@@ -88,7 +93,7 @@ void imbang::batchBlur(const string &dirName,const string &dstDirName,const stri
             imwrite(saveImagePath,bluredImg);
             cout<<endl<<saveImagePath<<"    saved"<<endl;
     }
-    imgBarn.clear();
+    clearBarn();
 }
 
 
@@ -113,7 +118,7 @@ void imbang::batchGaussianBlur(const string &dirName,const string &dstDirName,co
         imwrite(saveImagePath,bluredImg);
         cout<<endl<<saveImagePath<<"    saved"<<endl;
     }
-    imgBarn.clear();
+    clearBarn();
 }
 
 void imbang::batchMedianBlur(const string &dirName,const string &dstDirName,const string &prefix){
@@ -137,7 +142,7 @@ void imbang::batchMedianBlur(const string &dirName,const string &dstDirName,cons
         imwrite(saveImagePath,bluredImg);
         cout<<endl<<saveImagePath<<"    saved"<<endl;
     }
-    imgBarn.clear();
+    clearBarn();
 }
 
 
@@ -162,7 +167,7 @@ void imbang::batchBilateralBlur(const string &dirName,const string &dstDirName,c
         imwrite(saveImagePath,bluredImg);
         cout<<endl<<saveImagePath<<"    saved"<<endl;
     }
-    imgBarn.clear();
+    clearBarn();
 }
 
 
@@ -186,10 +191,9 @@ void imbang::batchAlterXMLNode(const string &dirName,const string &imageDir){
         XMLElement *fileNameNode = RootElement->FirstChildElement()->NextSiblingElement();
         fileNameNode->SetText((imgBarn[i++]).c_str());
         doc.SaveFile(filePath.c_str());
+        cout<<filePath<<" alter filename node done"<<endl;
     }
-
-    imgBarn.clear();
-    xmlBarn.clear();
+    clearBarn();
 }
 
 void imbang::batchAlterXMLName(const string &dirName, const string &prefix){
@@ -203,8 +207,7 @@ void imbang::batchAlterXMLName(const string &dirName, const string &prefix){
         cout<<toFilePath<<"          rename successful!"<<endl;
     }
 
-    imgBarn.clear();
-    xmlBarn.clear();
+    clearBarn();
 
 }
 
@@ -242,7 +245,7 @@ void imbang::enhancePicByLog(const string &dirName,const string dstDirName,const
             imwrite(saveImagePath,imageLog);
             cout<<endl<<saveImagePath<<"    saved"<<endl;
         }
-    imgBarn.clear();
+    clearBarn();
 }
 
 void imbang::batchSobel(const string &dirName,const string dstDirName,const string &prefix){
@@ -274,7 +277,63 @@ void imbang::batchSobel(const string &dirName,const string dstDirName,const stri
 
         cout<<endl<<saveImagePath<<"    saved"<<endl;
     }
-    imgBarn.clear();
+    clearBarn();
+}
+
+
+void imbang::batchSharpen(const string &dirName,const string dstDirName,const string &prefix){
+    fileUnderDir(dirName,1);
+    for(auto &el:imgBarn){
+        string str = dirName + "/" + el;
+        Mat img = imread(str);
+        if (img.empty())
+        {
+            cout << "打开图片失败,请检查" << endl;
+            return;
+        }
+        cout<<str + "    processing";
+        el[0] = prefix[0];
+        el[1] = prefix[1];
+
+        Mat result;
+
+        //创建一张空白图片
+        result.create(img.size(), img.type());
+        //处理边界内部的像素点, 图像最外围的像素点应该额外处理
+        for (int row = 1; row < img.rows - 1; row++)
+        {
+            //前一行像素点
+            const uchar* previous = img.ptr<const uchar>(row - 1);
+            //待处理的当前行
+            const uchar* current = img.ptr<const uchar>(row);
+            //下一行像素点
+            const uchar* next = img.ptr<const uchar>(row + 1);
+            uchar *output = result.ptr<uchar>(row);
+            int ch = img.channels();
+            int starts = ch;
+            int ends = (img.cols - 1) * ch;
+            for (int col = starts; col < ends; col++)
+            {
+                //输出图像的遍历指针与当前行的指针同步递增, 以每行的每一个像素点的每一个通道值为一个递增量, 因为要考虑到图像的通道数
+                *output++ = saturate_cast<uchar>(5 * current[col] - current[col - ch] - current[col + ch] - previous[col] - next[col]);
+            }
+        } //end loop
+
+        //处理边界, 外围像素点设为 0
+        result.row(0).setTo(Scalar::all(0));
+        result.row(result.rows - 1).setTo(Scalar::all(0));
+        result.col(0).setTo(Scalar::all(0));
+        result.col(result.cols - 1).setTo(Scalar::all(0));
+
+
+
+
+        string saveImagePath = dstDirName + "/" + el;
+        imwrite(saveImagePath,result);
+
+        cout<<endl<<saveImagePath<<"    saved"<<endl;
+    }
+    clearBarn();
 }
 
 void imbang::batchNoise(const string &dirName,const string dstDirName,const string &prefix,int noiseNum){
@@ -313,7 +372,7 @@ void imbang::batchNoise(const string &dirName,const string dstDirName,const stri
 
         cout<<endl<<saveImagePath<<"    saved"<<endl;
     }
-    imgBarn.clear();
+    clearBarn();
 }
 
 void imbang::batchRotate(const string &dirName,const string dstDirName,const string &prefix, int degree){
@@ -359,7 +418,7 @@ void imbang::batchRotate(const string &dirName,const string dstDirName,const str
 
         cout<<endl<<saveImagePath<<"    saved"<<endl;
     }
-    imgBarn.clear();
+    clearBarn();
 }
 
 void imbang::alterXMLofRotate(const string &dirName, vector<double> &varyData) {
@@ -412,8 +471,7 @@ void imbang::alterXMLofRotate(const string &dirName, vector<double> &varyData) {
         cout<<filePath<<"           saved "<<endl;
     }
 
-    imgBarn.clear();
-    xmlBarn.clear();
+    clearBarn();
 }
 
 
@@ -497,9 +555,191 @@ void imbang::pointThePicture(const string &xmlName,const string &imgName) {
 
     }
 
-    imgBarn.clear();
-    xmlBarn.clear();
+    clearBarn();
 }
+
+
+void imbang::generateImageSets(const string &xmlName,int trainval, int train){
+    // 读取
+    fileUnderDir(xmlName,2);
+    ofstream o;
+
+
+    for(auto &el:xmlBarn){
+        int dotIndex = el.find(".");
+        el.erase(dotIndex,el.size());
+    }
+
+
+    // 创建trainval.txt
+    o.open(xmlName + "/trainval.txt", std::ios::out | std::ios::app);  //以写入和在文件末尾添加的方式打开.txt文件，没有的话就创建该文件。
+    if (!o.is_open()) {
+        return;
+    }
+    for(int i = 0; i < trainval; i++){
+        o<<xmlBarn[i]<<endl;
+    }
+    o.close();
+
+    // 创建train.txt
+    o.open(xmlName + "/train.txt", std::ios::out | std::ios::app);  //以写入和在文件末尾添加的方式打开.txt文件，没有的话就创建该文件。
+    if (!o.is_open()) {
+        return;
+    }
+    // 写入指定的train张图片
+    for(int i = 0; i < train; i++){
+        o<<xmlBarn[i]<<endl;
+    }
+    o.close();
+
+    // 创建val.txt
+    o.open(xmlName + "/val.txt", std::ios::out | std::ios::app);  //以写入和在文件末尾添加的方式打开.txt文件，没有的话就创建该文件。
+    if (!o.is_open()) {
+        return;
+    }
+    // 写入train后的val张图片 总和为trainval
+    for(int i = train; i < trainval; i++){
+        o<<xmlBarn[i]<<endl;
+    }
+    o.close();
+
+    // 创建test.txt
+    o.open(xmlName + "/test.txt", std::ios::out | std::ios::app);  //以写入和在文件末尾添加的方式打开.txt文件，没有的话就创建该文件。
+    if (!o.is_open()) {
+        return;
+    }
+    // 把最后剩下的图片当作测试集
+    for(int i = trainval; i < xmlBarn.size(); i++){
+        o<<xmlBarn[i]<<endl;
+    }
+    o.close();
+    clearBarn();
+}
+
+
+void imbang::mergeFolders(const string &srcDir, const string &dstDir) {
+    string path=srcDir;
+    vector<string> files;//存放文件名
+    DIR *dir;
+    struct dirent *ptr;
+    char base[1000];
+    string temp;
+    string cmd="";
+
+
+    const char *b =path.c_str();
+
+    if ((dir=opendir(b)) == NULL)
+    {
+        perror("Open dir error...");
+        exit(1);
+    }
+
+    while ((ptr=readdir(dir)) != NULL)
+    {
+        if(strcmp(ptr->d_name,".")==0 || strcmp(ptr->d_name,"..")==0)    ///current dir OR parrent dir
+            continue;
+        else if(ptr->d_type == 8)    ///file
+        {
+            //printf("d_name:%s/%s\n",basePath,ptr->d_name);
+            temp=ptr->d_name;
+            cmd = "cp "+ srcDir +"/" + temp + " "+ dstDir;
+            system(cmd.c_str());
+        }
+        else if(ptr->d_type == 10)    ///link file
+            //printf("d_name:%s/%s\n",basePath,ptr->d_name);
+            continue;
+        else if(ptr->d_type == 4)    ///dir
+        {
+            temp=ptr->d_name;
+            files.push_back(temp);
+        }
+    }
+    closedir(dir);
+    cmd = "";
+
+    for(int i=0; i<files.size(); i++)
+    {
+        //cout<<files[i]<<endl;
+        cmd+="cp "+ srcDir + "/";
+        cmd+=files[i];
+        cmd+="/* ";
+        cmd+=dstDir;
+
+        system(cmd.c_str());
+        cmd="";
+    }
+}
+
+
+
+void imbang::ClearFilesNotFolders(const string &srcDir) {
+    fileUnderDir(srcDir,1);
+
+    string cmd = "";
+
+    for(auto &el:imgBarn)
+    {
+        //cout<<files[i]<<endl;
+        cmd+="rm -rf "+ srcDir + "/";
+        cmd+= el;
+        cmd+="/* ";
+
+        system(cmd.c_str());
+        cmd="";
+    }
+    clearBarn();
+}
+
+void imbang::ClearNotUsedImgByXML(const string &img_dir,const string &xml_dir) {
+    fileUnderDir(img_dir,1);
+    fileUnderDir(xml_dir,2);
+
+    for(auto &el:xmlBarn){
+        int dotIndex = el.find(".");
+        el.erase(dotIndex,el.size());
+    }
+
+
+
+    for(auto &el:imgBarn){
+        int dotIndex = el.find(".");
+        el.erase(dotIndex,el.size());
+    }
+
+    string cmd = "";
+
+    for(auto &el:imgBarn)
+    {
+        bool flag = false;
+        for(auto &xml:xmlBarn){
+            if(xml == el){
+                flag = true;
+            }
+        }
+        if(!flag){
+            cmd += "rm -rf "+ img_dir + "/";
+            cmd +=  el;
+            cmd += ".jpg ";
+
+            system(cmd.c_str());
+            cout<<cmd<<endl;
+            cmd="";
+        }
+    }
+
+    clearBarn();
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
